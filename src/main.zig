@@ -9,6 +9,7 @@ const LlmHook = @import("llm_hook").LlmHook;
 const LlmConfig = @import("llm_hook").LlmConfig;
 const ClipboardHook = @import("clipboard_hook").ClipboardHook;
 const model_manager = @import("model_manager");
+const console = @import("console");
 
 const c_env = @cImport({
     @cInclude("stdlib.h");
@@ -20,8 +21,16 @@ fn getEnv(key: [*:0]const u8) ?[:0]const u8 {
 }
 
 fn log(comptime fmt: []const u8, args: anytype) void {
-    const w = std.fs.File.stderr().deprecatedWriter();
-    w.print(fmt, args) catch {};
+    console.stderr().print(fmt, args);
+}
+
+/// Read and discard bytes until a newline is received.
+/// Handles both Unix (\n) and Windows (\r\n) line endings.
+fn waitForEnter(reader: anytype) !void {
+    while (true) {
+        const byte = try reader.readByte();
+        if (byte == '\n') return;
+    }
 }
 
 pub fn main() !void {
@@ -34,6 +43,14 @@ pub fn main() !void {
         std.process.exit(1);
     };
     defer std.process.argsFree(allocator, args);
+
+    var cli_language: ?[:0]const u8 = null;
+    var cli_model: ?[:0]const u8 = null;
+    var cli_llm_url: ?[:0]const u8 = null;
+    var cli_llm_key: ?[:0]const u8 = null;
+    var cli_llm_model: ?[:0]const u8 = null;
+    var cli_verbose: bool = false;
+    var cli_clipboard: bool = false;
 
     var i: usize = 1; // skip argv[0]
     while (i < args.len) : (i += 1) {
@@ -55,6 +72,45 @@ pub fn main() !void {
                 std.process.exit(1);
             };
             return;
+        } else if (std.mem.eql(u8, arg, "--language")) {
+            i += 1;
+            if (i >= args.len) {
+                log("Error: --language requires a language code argument.\n", .{});
+                std.process.exit(1);
+            }
+            cli_language = args[i];
+        } else if (std.mem.eql(u8, arg, "--model")) {
+            i += 1;
+            if (i >= args.len) {
+                log("Error: --model requires a model path argument.\n", .{});
+                std.process.exit(1);
+            }
+            cli_model = args[i];
+        } else if (std.mem.eql(u8, arg, "--llm-url")) {
+            i += 1;
+            if (i >= args.len) {
+                log("Error: --llm-url requires a URL argument.\n", .{});
+                std.process.exit(1);
+            }
+            cli_llm_url = args[i];
+        } else if (std.mem.eql(u8, arg, "--llm-key")) {
+            i += 1;
+            if (i >= args.len) {
+                log("Error: --llm-key requires an API key argument.\n", .{});
+                std.process.exit(1);
+            }
+            cli_llm_key = args[i];
+        } else if (std.mem.eql(u8, arg, "--llm-model")) {
+            i += 1;
+            if (i >= args.len) {
+                log("Error: --llm-model requires a model name argument.\n", .{});
+                std.process.exit(1);
+            }
+            cli_llm_model = args[i];
+        } else if (std.mem.eql(u8, arg, "--verbose")) {
+            cli_verbose = true;
+        } else if (std.mem.eql(u8, arg, "--clipboard")) {
+            cli_clipboard = true;
         } else {
             log("Error: Unknown argument '{s}'\n", .{arg});
             model_manager.printUsage();
@@ -65,11 +121,11 @@ pub fn main() !void {
     // =========================================================================
     // Parse configuration from environment variables
     // =========================================================================
-    const model_path_env = getEnv("WHISPER_MODEL");
+    const model_path_env = cli_model orelse getEnv("WHISPER_MODEL");
     const default_model_path = model_manager.getDefaultModelPath();
     const model_path_slice: []const u8 = if (model_path_env) |e| e else default_model_path;
     // For Whisper.init we need a sentinel-terminated pointer.
-    // getenv returns [:0]const u8 (already sentinel-terminated).
+    // CLI args and getenv both return [:0]const u8 (already sentinel-terminated).
     // For the default path, we need to create a sentinel-terminated copy.
     const model_path: [*:0]const u8 = if (model_path_env) |e| e.ptr else blk: {
         const buf = allocator.allocSentinel(u8, default_model_path.len, 0) catch {
@@ -80,14 +136,14 @@ pub fn main() !void {
         break :blk buf.ptr;
     };
 
-    const language_env = getEnv("WHISPER_LANGUAGE");
+    const language_env = cli_language orelse getEnv("WHISPER_LANGUAGE");
     const language: ?[*:0]const u8 = if (language_env) |l| l.ptr else null;
 
-    const llm_api_url: []const u8 = if (getEnv("LLM_API_URL")) |e| e else "https://api.openai.com/v1/chat/completions";
-    const llm_api_key = getEnv("LLM_API_KEY");
-    const llm_model: []const u8 = if (getEnv("LLM_MODEL")) |e| e else "gpt-4o-mini";
-    const verbose = getEnv("REWRIGHT_VERBOSE") != null;
-    const clipboard_enabled = getEnv("REWRIGHT_CLIPBOARD") != null;
+    const llm_api_url: []const u8 = if (cli_llm_url) |u| u else if (getEnv("LLM_API_URL")) |e| e else "https://api.openai.com/v1/chat/completions";
+    const llm_api_key: ?[]const u8 = if (cli_llm_key) |k| k else if (getEnv("LLM_API_KEY")) |e| @as(?[]const u8, e) else null;
+    const llm_model: []const u8 = if (cli_llm_model) |m| m else if (getEnv("LLM_MODEL")) |e| e else "gpt-4o-mini";
+    const verbose = cli_verbose or (getEnv("REWRIGHT_VERBOSE") != null);
+    const clipboard_enabled = cli_clipboard or (getEnv("REWRIGHT_CLIPBOARD") != null);
 
     if (verbose) {
         log("[config] model={s}\n", .{model_path_slice});
@@ -189,7 +245,7 @@ pub fn main() !void {
     while (true) {
         // Wait for Enter to start recording
         log("\n[Press Enter to start recording]\n", .{});
-        _ = stdin.readByte() catch |err| {
+        waitForEnter(stdin) catch |err| {
             switch (err) {
                 error.EndOfStream => {
                     log("\nEOF received. Exiting.\n", .{});
@@ -210,7 +266,7 @@ pub fn main() !void {
         log("Recording... [Press Enter to stop]\n", .{});
 
         // Wait for Enter to stop recording
-        _ = stdin.readByte() catch |err| {
+        waitForEnter(stdin) catch |err| {
             switch (err) {
                 error.EndOfStream => {
                     _ = audio.stopRecording();

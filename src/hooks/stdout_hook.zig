@@ -1,5 +1,5 @@
-const std = @import("std");
 const hook = @import("hook");
+const console = @import("console");
 const Hook = hook.Hook;
 const HookError = hook.HookError;
 const TranscriptionResult = hook.TranscriptionResult;
@@ -9,18 +9,14 @@ pub const StdoutHook = struct {
 
     pub fn process(ptr: *anyopaque, result: *const TranscriptionResult) HookError!void {
         const self: *StdoutHook = @ptrCast(@alignCast(ptr));
-        const stdout = std.fs.File.stdout().deprecatedWriter();
+        const out = console.stdout();
 
         if (self.verbose) {
             for (result.segments) |seg| {
-                stdout.print("[{d} -> {d}] {s}\n", .{ seg.t0, seg.t1, seg.text }) catch {
-                    return HookError.HookFailed;
-                };
+                out.print("[{d} -> {d}] {s}\n", .{ seg.t0, seg.t1, seg.text });
             }
         } else {
-            stdout.print("{s}\n", .{result.text}) catch {
-                return HookError.HookFailed;
-            };
+            out.print("{s}\n", .{result.text});
         }
     }
 

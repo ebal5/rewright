@@ -37,6 +37,10 @@ pub fn build(b: *std.Build) void {
     const ggml_cpu_dir = b.path("libs/whisper.cpp/ggml/src/ggml-cpu");
 
     // Common C/C++ flags
+    // -fno-sanitize=undefined: Disable UBSan for third-party C/C++ code.
+    // whisper.cpp/ggml use null pointer offset patterns that are technically
+    // UB but are common in C/C++. Zig's Debug builds enable UBSan for C
+    // sources, which causes panics on these patterns.
     const common_c_flags: []const []const u8 = &.{
         "-DGGML_USE_CPU",
         "-D_GNU_SOURCE",
@@ -44,6 +48,7 @@ pub fn build(b: *std.Build) void {
         "-DNDEBUG",
         "-DGGML_VERSION=\"0.9.8\"",
         "-DGGML_COMMIT=\"v1.8.4\"",
+        "-fno-sanitize=undefined",
     };
 
     const common_cpp_flags: []const []const u8 = &.{
@@ -54,6 +59,7 @@ pub fn build(b: *std.Build) void {
         "-DGGML_VERSION=\"0.9.8\"",
         "-DGGML_COMMIT=\"v1.8.4\"",
         "-std=c++17",
+        "-fno-sanitize=undefined",
     };
 
     const whisper_cpp_flags: []const []const u8 = &.{
@@ -65,6 +71,7 @@ pub fn build(b: *std.Build) void {
         "-DGGML_COMMIT=\"v1.8.4\"",
         "-DWHISPER_VERSION=\"1.8.4\"",
         "-std=c++17",
+        "-fno-sanitize=undefined",
     };
 
     // Build GPU macro flags (appended to the base flags at usage sites).
@@ -264,12 +271,19 @@ pub fn build(b: *std.Build) void {
     });
     audio_mod.addIncludePath(miniaudio_dir);
 
+    const console_mod = b.createModule(.{
+        .root_source_file = b.path("src/console.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const stdout_hook_mod = b.createModule(.{
         .root_source_file = b.path("src/hooks/stdout_hook.zig"),
         .target = target,
         .optimize = optimize,
     });
     stdout_hook_mod.addImport("hook", hook_mod);
+    stdout_hook_mod.addImport("console", console_mod);
 
     const llm_hook_mod = b.createModule(.{
         .root_source_file = b.path("src/hooks/llm_hook.zig"),
@@ -290,6 +304,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    model_manager_mod.addImport("console", console_mod);
 
     // =================================================================
     // Main executable
@@ -308,6 +323,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("llm_hook", llm_hook_mod);
     exe_mod.addImport("clipboard_hook", clipboard_hook_mod);
     exe_mod.addImport("model_manager", model_manager_mod);
+    exe_mod.addImport("console", console_mod);
 
     const exe = b.addExecutable(.{
         .name = "rewright",
@@ -324,6 +340,7 @@ pub fn build(b: *std.Build) void {
             "-DMA_NO_ENCODING",
             "-DMA_NO_GENERATION",
             "-DNDEBUG",
+            "-fno-sanitize=undefined",
         },
     });
 

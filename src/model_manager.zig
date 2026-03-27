@@ -1,4 +1,5 @@
 const std = @import("std");
+const console = @import("console");
 
 const c_env = @cImport({
     @cInclude("stdlib.h");
@@ -10,8 +11,7 @@ fn getEnv(key: [*:0]const u8) ?[:0]const u8 {
 }
 
 fn logErr(comptime fmt: []const u8, args: anytype) void {
-    const w = std.fs.File.stderr().deprecatedWriter();
-    w.print(fmt, args) catch {};
+    console.stderr().print(fmt, args);
 }
 
 // =========================================================================
@@ -125,18 +125,18 @@ pub fn isModelDownloaded(model_name: []const u8) bool {
 
 /// Print a table of available models with download status.
 pub fn listModels() void {
-    const w = std.fs.File.stdout().deprecatedWriter();
-    w.print("\nAvailable whisper models:\n\n", .{}) catch {};
-    w.print("  {s:<10} {s:<10} {s:<30} {s}\n", .{ "Name", "Size", "Filename", "Status" }) catch {};
-    w.print("  {s:<10} {s:<10} {s:<30} {s}\n", .{ "----", "----", "--------", "------" }) catch {};
+    const out = console.stdout();
+    out.print("\nAvailable whisper models:\n\n", .{});
+    out.print("  {s:<10} {s:<10} {s:<30} {s}\n", .{ "Name", "Size", "Filename", "Status" });
+    out.print("  {s:<10} {s:<10} {s:<30} {s}\n", .{ "----", "----", "--------", "------" });
 
     for (&models) |*m| {
         const downloaded = isModelDownloaded(m.name);
         const status: []const u8 = if (downloaded) "[downloaded]" else "";
         const marker: []const u8 = if (std.mem.eql(u8, m.name, default_model_name)) " (default)" else "";
-        w.print("  {s:<10} {s:<10} {s:<30} {s}{s}\n", .{ m.name, m.size_desc, m.filename, status, marker }) catch {};
+        out.print("  {s:<10} {s:<10} {s:<30} {s}{s}\n", .{ m.name, m.size_desc, m.filename, status, marker });
     }
-    w.print("\nModel directory: {s}\n", .{getModelDir()}) catch {};
+    out.print("\nModel directory: {s}\n", .{getModelDir()});
 }
 
 /// Download a model from HuggingFace.
@@ -180,31 +180,26 @@ pub fn downloadModel(model_name: []const u8) !void {
         return error.InvalidUrl;
     };
 
-    var req = client.request(.GET, uri, .{}) catch {
+    var req = client.request(.GET, uri, .{
+        // Follow up to 3 redirects (HuggingFace returns 302)
+        .redirect_behavior = @enumFromInt(3),
+    }) catch {
         logErr("Error: Network error. Check your internet connection and try again.\n", .{});
         return error.NetworkError;
     };
     defer req.deinit();
 
-    req.transfer_encoding = .none;
-    var body_writer = req.sendBody(&.{}) catch {
+    req.sendBodiless() catch {
         logErr("Error: Network error during request. Try again.\n", .{});
         return error.NetworkError;
     };
-    _ = &body_writer;
-    req.connection.?.flush() catch {
-        logErr("Error: Network error during flush. Try again.\n", .{});
-        return error.NetworkError;
-    };
 
-    var response = req.receiveHead(&.{}) catch {
+    var redirect_buf: [8 * 1024]u8 = undefined;
+    var response = req.receiveHead(&redirect_buf) catch {
         logErr("Error: Network error receiving response. Try again.\n", .{});
         return error.NetworkError;
     };
 
-    // Follow redirects: HuggingFace returns 302 redirects
-    // std.http.Client in Zig 0.15 should handle redirects automatically,
-    // but if we get a non-200, report it
     if (response.head.status != .ok) {
         logErr("Error: Server returned HTTP {d}. Try again later.\n", .{@intFromEnum(response.head.status)});
         return error.HttpError;
@@ -243,6 +238,8 @@ pub fn downloadModel(model_name: []const u8) !void {
         };
         if (n == 0) break;
 
+        const is_last = n < read_buf.len;
+
         out_file.writeAll(read_buf[0..n]) catch |err| {
             logErr("\nError: Write error: {}. Check disk space.\n", .{err});
             out_file.close();
@@ -280,6 +277,11 @@ pub fn downloadModel(model_name: []const u8) !void {
             const dl_mb = downloaded / (1024 * 1024);
             logErr("\rDownloaded: {d} MB", .{dl_mb});
         }
+
+        // readSliceShort returns < buffer.len iff the stream has ended.
+        // Do NOT call it again — the reader state has already transitioned
+        // and a subsequent call would access an inactive union field.
+        if (is_last) break;
     }
 
     out_file.close();
@@ -301,16 +303,24 @@ pub fn getDefaultModelPath() []const u8 {
 
 /// Print CLI usage for model-related arguments.
 pub fn printUsage() void {
-    const w = std.fs.File.stderr().deprecatedWriter();
-    w.print(
+    const err = console.stderr();
+    err.print(
         \\Usage: rewright [OPTIONS]
         \\
         \\Options:
         \\  --list-models          List available whisper models
         \\  --download-model NAME  Download a whisper model
+        \\  --language CODE        Whisper language (e.g. "en", "ja")
+        \\  --model PATH           Path to whisper model file
+        \\  --llm-url URL          OpenAI-compatible API endpoint
+        \\  --llm-key KEY          API key for LLM service
+        \\  --llm-model NAME       LLM model name (default: gpt-4o-mini)
+        \\  --verbose              Enable verbose logging
+        \\  --clipboard            Enable clipboard hook
         \\  --help                 Show this help message
         \\
         \\Without arguments, starts the normal dictation flow.
+        \\CLI arguments take priority over environment variables.
         \\
         \\Environment variables:
         \\  WHISPER_MODEL       Path to whisper model file
@@ -321,7 +331,7 @@ pub fn printUsage() void {
         \\  REWRIGHT_VERBOSE    Enable verbose logging (set to any value)
         \\  REWRIGHT_CLIPBOARD  Enable clipboard hook (set to any value)
         \\
-    , .{}) catch {};
+    , .{});
 }
 
 // =========================================================================
