@@ -303,6 +303,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/model_manager.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
     model_manager_mod.addImport("console", console_mod);
 
