@@ -9,8 +9,13 @@ const LlmHook = @import("llm_hook").LlmHook;
 const LlmConfig = @import("llm_hook").LlmConfig;
 const ClipboardHook = @import("clipboard_hook").ClipboardHook;
 
-fn getEnv(key: []const u8) ?[:0]const u8 {
-    return std.posix.getenv(key);
+const c_env = @cImport({
+    @cInclude("stdlib.h");
+});
+
+fn getEnv(key: [*:0]const u8) ?[:0]const u8 {
+    const val = c_env.getenv(key) orelse return null;
+    return std.mem.span(val);
 }
 
 fn log(comptime fmt: []const u8, args: anytype) void {
