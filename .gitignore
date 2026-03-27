@@ -1,0 +1,24 @@
+# Build outputs
+zig-out/
+zig-cache/
+.zig-cache/
+
+# Original repo (reference only, not part of this project)
+openwhispr-original/
+
+# Models (large binary files)
+*.bin
+*.gguf
+
+# Environment / secrets
+.env*
+*.key
+credentials.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
