@@ -285,6 +285,12 @@ pub fn build(b: *std.Build) void {
     });
     clipboard_hook_mod.addImport("hook", hook_mod);
 
+    const model_manager_mod = b.createModule(.{
+        .root_source_file = b.path("src/model_manager.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // =================================================================
     // Main executable
     // =================================================================
@@ -301,6 +307,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("stdout_hook", stdout_hook_mod);
     exe_mod.addImport("llm_hook", llm_hook_mod);
     exe_mod.addImport("clipboard_hook", clipboard_hook_mod);
+    exe_mod.addImport("model_manager", model_manager_mod);
 
     const exe = b.addExecutable(.{
         .name = "rewright",
@@ -460,4 +467,11 @@ pub fn build(b: *std.Build) void {
     });
     const run_test_llm_hook = b.addRunArtifact(test_llm_hook);
     test_step.dependOn(&run_test_llm_hook.step);
+
+    // Model manager tests
+    const model_manager_tests = b.addTest(.{
+        .root_module = model_manager_mod,
+    });
+    const run_model_manager_tests = b.addRunArtifact(model_manager_tests);
+    test_step.dependOn(&run_model_manager_tests.step);
 }

@@ -8,6 +8,7 @@ const StdoutHook = @import("stdout_hook").StdoutHook;
 const LlmHook = @import("llm_hook").LlmHook;
 const LlmConfig = @import("llm_hook").LlmConfig;
 const ClipboardHook = @import("clipboard_hook").ClipboardHook;
+const model_manager = @import("model_manager");
 
 const c_env = @cImport({
     @cInclude("stdlib.h");
@@ -25,14 +26,59 @@ fn log(comptime fmt: []const u8, args: anytype) void {
 
 pub fn main() !void {
     // =========================================================================
+    // Parse CLI arguments
+    // =========================================================================
+    const allocator = std.heap.page_allocator;
+    const args = std.process.argsAlloc(allocator) catch {
+        log("Error: Failed to parse command line arguments.\n", .{});
+        std.process.exit(1);
+    };
+    defer std.process.argsFree(allocator, args);
+
+    var i: usize = 1; // skip argv[0]
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            model_manager.printUsage();
+            return;
+        } else if (std.mem.eql(u8, arg, "--list-models")) {
+            model_manager.listModels();
+            return;
+        } else if (std.mem.eql(u8, arg, "--download-model")) {
+            i += 1;
+            if (i >= args.len) {
+                log("Error: --download-model requires a model name argument.\n", .{});
+                log("Run with --list-models to see available models.\n", .{});
+                std.process.exit(1);
+            }
+            model_manager.downloadModel(args[i]) catch {
+                std.process.exit(1);
+            };
+            return;
+        } else {
+            log("Error: Unknown argument '{s}'\n", .{arg});
+            model_manager.printUsage();
+            std.process.exit(1);
+        }
+    }
+
+    // =========================================================================
     // Parse configuration from environment variables
     // =========================================================================
     const model_path_env = getEnv("WHISPER_MODEL");
-    const model_path_slice: []const u8 = if (model_path_env) |e| e else "models/ggml-base.bin";
+    const default_model_path = model_manager.getDefaultModelPath();
+    const model_path_slice: []const u8 = if (model_path_env) |e| e else default_model_path;
     // For Whisper.init we need a sentinel-terminated pointer.
     // getenv returns [:0]const u8 (already sentinel-terminated).
-    // For the default literal, it is also sentinel-terminated at comptime.
-    const model_path: [*:0]const u8 = if (model_path_env) |e| e.ptr else "models/ggml-base.bin";
+    // For the default path, we need to create a sentinel-terminated copy.
+    const model_path: [*:0]const u8 = if (model_path_env) |e| e.ptr else blk: {
+        const buf = allocator.allocSentinel(u8, default_model_path.len, 0) catch {
+            log("Error: Out of memory.\n", .{});
+            std.process.exit(1);
+        };
+        @memcpy(buf, default_model_path);
+        break :blk buf.ptr;
+    };
 
     const language_env = getEnv("WHISPER_LANGUAGE");
     const language: ?[*:0]const u8 = if (language_env) |l| l.ptr else null;
