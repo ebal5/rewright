@@ -1,0 +1,42 @@
+Third-Party Licenses and Attributions
+======================================
+
+This project incorporates or is derived from the following third-party works.
+
+
+1. OpenWhispr
+-------------
+   Repository: https://github.com/OpenWhispr/openwhispr
+   License:    MIT License
+   Copyright:  Copyright (c) 2024 OpenWhispr Team
+
+   rewright is a Zig rewrite inspired by OpenWhispr (an Electron-based
+   speech-to-text application). The following content was directly ported:
+
+   - prompts/cleanup.json
+     The text cleanup prompt and dictionary suffix were adapted from
+     OpenWhispr's src/locales/en/prompts.json.
+
+   - Design references
+     Silence threshold value (0.001), LLM hook architecture, and the
+     general dictation workflow were informed by OpenWhispr's design.
+
+
+2. whisper.cpp
+--------------
+   Repository: https://github.com/ggerganov/whisper.cpp
+   License:    MIT License
+   Copyright:  Copyright (c) 2023-2026 The ggml authors
+   Location:   libs/whisper.cpp/ (git submodule, pinned to v1.8.4)
+
+   Used as the speech-to-text inference engine via C API bindings.
+
+
+3. miniaudio
+------------
+   Repository: https://github.com/mackron/miniaudio
+   License:    Public Domain (Unlicense) OR MIT-0 (No Attribution)
+   Copyright:  Copyright 2026 David Reid
+   Location:   libs/miniaudio/ (vendored)
+
+   Used for cross-platform audio capture.
