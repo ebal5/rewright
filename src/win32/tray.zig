@@ -13,6 +13,7 @@ const NIM_ADD = 0x00000000;
 const NIM_DELETE = 0x00000002;
 
 // Context menu item IDs
+pub const IDM_SETTINGS: c_uint = 1000;
 const IDM_QUIT: c_uint = 1001;
 
 /// Convert a raw handle (usize) to win.HWND without alignment checks.
@@ -55,6 +56,8 @@ pub const Tray = struct {
         if (menu == null) return;
         defer _ = win.DestroyMenu(menu);
 
+        _ = win.AppendMenuW(menu, 0, IDM_SETTINGS, toUtf16("Settings..."));
+        _ = win.AppendMenuW(menu, 0x0800, 0, null); // MF_SEPARATOR
         _ = win.AppendMenuW(menu, 0, IDM_QUIT, toUtf16("Quit"));
 
         var pt: win.POINT = undefined;

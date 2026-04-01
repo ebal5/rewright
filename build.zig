@@ -308,6 +308,12 @@ pub fn build(b: *std.Build) void {
     });
     model_manager_mod.addImport("console", console_mod);
 
+    const config_mod = b.createModule(.{
+        .root_source_file = b.path("src/config.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // =================================================================
     // Win32 GUI modules (Windows only, controlled by -Dgui)
     // =================================================================
@@ -325,6 +331,13 @@ pub fn build(b: *std.Build) void {
         });
         tray_mod.addImport("messages", messages_mod);
 
+        const settings_mod = b.createModule(.{
+            .root_source_file = b.path("src/win32/settings.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        settings_mod.addImport("config", config_mod);
+
         const mod = b.createModule(.{
             .root_source_file = b.path("src/win32/gui.zig"),
             .target = target,
@@ -333,6 +346,8 @@ pub fn build(b: *std.Build) void {
         mod.addImport("tray", tray_mod);
         mod.addImport("messages", messages_mod);
         mod.addImport("console", console_mod);
+        mod.addImport("config", config_mod);
+        mod.addImport("settings", settings_mod);
 
         break :blk mod;
     } else null;

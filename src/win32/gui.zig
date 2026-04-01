@@ -3,6 +3,8 @@ const builtin = @import("builtin");
 const Tray = @import("tray").Tray;
 const messages = @import("messages");
 const console = @import("console");
+const Config = @import("config").Config;
+const settings = @import("settings");
 
 const win = @cImport({
     @cDefine("WIN32_LEAN_AND_MEAN", "");
@@ -10,6 +12,7 @@ const win = @cImport({
 });
 
 var g_tray: ?Tray = null;
+var g_config: Config = undefined;
 
 fn log(comptime fmt: []const u8, args: anytype) void {
     console.stderr().print(fmt, args);
@@ -17,6 +20,9 @@ fn log(comptime fmt: []const u8, args: anytype) void {
 
 pub fn run() void {
     log("Starting GUI mode...\n", .{});
+
+    // Load configuration
+    g_config = Config.load(std.heap.page_allocator);
 
     const hInstance: win.HINSTANCE = @ptrCast(win.GetModuleHandleW(null));
 
@@ -34,10 +40,10 @@ pub fn run() void {
 
     // Create a hidden message-only window
     const hwnd = win.CreateWindowExW(
-        0, // dwExStyle
+        0,
         toUtf16("RewrightWindowClass"),
         toUtf16("rewright"),
-        0, // dwStyle (hidden)
+        0,
         0,
         0,
         0,
@@ -68,6 +74,7 @@ pub fn run() void {
     if (g_tray) |*tray| {
         tray.deinit();
     }
+    g_config.deinit();
     log("GUI mode exited.\n", .{});
 }
 
@@ -75,6 +82,10 @@ fn wndProc(hwnd: win.HWND, uMsg: c_uint, wParam: win.WPARAM, lParam: win.LPARAM)
     switch (uMsg) {
         win.WM_COMMAND => {
             const id: c_uint = @truncate(wParam);
+            if (id == @import("tray").IDM_SETTINGS) {
+                openSettings(@intFromPtr(hwnd.?));
+                return 0;
+            }
             if (Tray.handleMenuCommand(id)) return 0;
         },
         messages.WM_APP_TRAY_CALLBACK => {
@@ -85,7 +96,9 @@ fn wndProc(hwnd: win.HWND, uMsg: c_uint, wParam: win.WPARAM, lParam: win.LPARAM)
                         tray.showContextMenu(@intFromPtr(hwnd.?));
                     }
                 },
-                win.WM_LBUTTONDBLCLK => {},
+                win.WM_LBUTTONDBLCLK => {
+                    openSettings(@intFromPtr(hwnd.?));
+                },
                 else => {},
             }
             return 0;
@@ -99,7 +112,14 @@ fn wndProc(hwnd: win.HWND, uMsg: c_uint, wParam: win.WPARAM, lParam: win.LPARAM)
     return win.DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
-/// Convert a comptime ASCII string to a null-terminated UTF-16 (WCHAR) pointer.
+fn openSettings(hwnd_raw: usize) void {
+    if (settings.showSettingsDialog(hwnd_raw, &g_config)) {
+        g_config.save() catch |err| {
+            log("Error: Failed to save config: {}\n", .{err});
+        };
+    }
+}
+
 fn toUtf16(comptime s: []const u8) [*:0]const win.WCHAR {
     const data = comptime blk: {
         var buf: [s.len:0]win.WCHAR = undefined;
