@@ -53,7 +53,7 @@ pub fn main() !void {
     var cli_llm_model: ?[:0]const u8 = null;
     var cli_verbose: bool = false;
     var cli_clipboard: bool = false;
-    var cli_gui: bool = false;
+    var cli_cli: bool = false;
 
     var i: usize = 1; // skip argv[0]
     while (i < args.len) : (i += 1) {
@@ -114,8 +114,8 @@ pub fn main() !void {
             cli_verbose = true;
         } else if (std.mem.eql(u8, arg, "--clipboard")) {
             cli_clipboard = true;
-        } else if (std.mem.eql(u8, arg, "--gui")) {
-            cli_gui = true;
+        } else if (std.mem.eql(u8, arg, "--cli")) {
+            cli_cli = true;
         } else {
             log("Error: Unknown argument '{s}'\n", .{arg});
             model_manager.printUsage();
@@ -124,16 +124,12 @@ pub fn main() !void {
     }
 
     // =========================================================================
-    // GUI mode: launch Win32 GUI and exit
+    // GUI mode: default when GUI is compiled in, unless --cli is specified
     // =========================================================================
-    if (cli_gui) {
-        if (comptime build_options.enable_gui) {
+    if (comptime build_options.enable_gui) {
+        if (!cli_cli) {
             win32_gui.run();
             return;
-        } else {
-            log("Error: GUI mode is not available on this platform.\n", .{});
-            log("GUI mode requires Windows and building with -Dgui=true.\n", .{});
-            std.process.exit(1);
         }
     }
 
