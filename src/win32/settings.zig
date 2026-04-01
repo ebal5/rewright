@@ -26,7 +26,7 @@ const IDC_CANCEL: c_int = 110;
 
 // Window metrics
 const DLG_WIDTH: c_int = 450;
-const DLG_HEIGHT: c_int = 500;
+const DLG_HEIGHT: c_int = 560;
 const MARGIN: c_int = 16;
 const LABEL_WIDTH: c_int = 110;
 const CONTROL_HEIGHT: c_int = 24;
