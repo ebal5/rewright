@@ -26,12 +26,13 @@ const IDC_CANCEL: c_int = 110;
 
 // Window metrics
 const DLG_WIDTH: c_int = 450;
-const DLG_HEIGHT: c_int = 560;
+const DLG_HEIGHT: c_int = 500;
 const MARGIN: c_int = 16;
 const LABEL_WIDTH: c_int = 110;
 const CONTROL_HEIGHT: c_int = 24;
 const ROW_SPACING: c_int = 30;
 const SECTION_SPACING: c_int = 10;
+const CHECKBOX_WIDTH: c_int = 220;
 const BUTTON_WIDTH: c_int = 80;
 const BUTTON_HEIGHT: c_int = 28;
 const PROMPT_HEIGHT: c_int = 100;
@@ -640,7 +641,7 @@ pub fn showSettingsDialog(parent_hwnd: usize, config: *Config) bool {
     cur_y += CONTROL_HEIGHT + 2;
 
     // Enable LLM checkbox
-    g_llm_enabled_check = createCheckBox(dlg_hwnd, hInstance, IDC_LLM_ENABLED, toUtf16("Enable LLM cleanup"), MARGIN, cur_y, content_width, CONTROL_HEIGHT);
+    g_llm_enabled_check = createCheckBox(dlg_hwnd, hInstance, IDC_LLM_ENABLED, toUtf16("Enable LLM cleanup"), MARGIN, cur_y, CHECKBOX_WIDTH, CONTROL_HEIGHT);
     cur_y += ROW_SPACING;
 
     // API URL
@@ -668,15 +669,15 @@ pub fn showSettingsDialog(parent_hwnd: usize, config: *Config) bool {
     cur_y += CONTROL_HEIGHT + 2;
 
     // Clipboard checkbox
-    g_clipboard_check = createCheckBox(dlg_hwnd, hInstance, IDC_CLIPBOARD_ENABLED, toUtf16("Copy to clipboard"), MARGIN, cur_y, content_width, CONTROL_HEIGHT);
+    g_clipboard_check = createCheckBox(dlg_hwnd, hInstance, IDC_CLIPBOARD_ENABLED, toUtf16("Copy to clipboard"), MARGIN, cur_y, CHECKBOX_WIDTH, CONTROL_HEIGHT);
     cur_y += ROW_SPACING;
 
     // Paste checkbox
-    g_paste_check = createCheckBox(dlg_hwnd, hInstance, IDC_PASTE_ENABLED, toUtf16("Paste at cursor position"), MARGIN, cur_y, content_width, CONTROL_HEIGHT);
+    g_paste_check = createCheckBox(dlg_hwnd, hInstance, IDC_PASTE_ENABLED, toUtf16("Paste at cursor position"), MARGIN, cur_y, CHECKBOX_WIDTH, CONTROL_HEIGHT);
     cur_y += ROW_SPACING + SECTION_SPACING;
 
     // --- Buttons ---
-    const buttons_y = DLG_HEIGHT - BUTTON_HEIGHT - MARGIN - 40; // account for title bar
+    const buttons_y = cur_y;
     const ok_x = DLG_WIDTH - 2 * BUTTON_WIDTH - MARGIN - 16 - 8;
     const cancel_x = DLG_WIDTH - BUTTON_WIDTH - MARGIN - 16;
     createButton(dlg_hwnd, hInstance, IDC_OK, toUtf16("OK"), ok_x, buttons_y, BUTTON_WIDTH, BUTTON_HEIGHT);
