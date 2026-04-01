@@ -10,6 +10,8 @@ const LlmConfig = @import("llm_hook").LlmConfig;
 const ClipboardHook = @import("clipboard_hook").ClipboardHook;
 const model_manager = @import("model_manager");
 const console = @import("console");
+const build_options = @import("build_options");
+const win32_gui = if (build_options.enable_gui) @import("win32_gui") else undefined;
 
 const c_env = @cImport({
     @cInclude("stdlib.h");
@@ -51,6 +53,7 @@ pub fn main() !void {
     var cli_llm_model: ?[:0]const u8 = null;
     var cli_verbose: bool = false;
     var cli_clipboard: bool = false;
+    var cli_gui: bool = false;
 
     var i: usize = 1; // skip argv[0]
     while (i < args.len) : (i += 1) {
@@ -111,9 +114,25 @@ pub fn main() !void {
             cli_verbose = true;
         } else if (std.mem.eql(u8, arg, "--clipboard")) {
             cli_clipboard = true;
+        } else if (std.mem.eql(u8, arg, "--gui")) {
+            cli_gui = true;
         } else {
             log("Error: Unknown argument '{s}'\n", .{arg});
             model_manager.printUsage();
+            std.process.exit(1);
+        }
+    }
+
+    // =========================================================================
+    // GUI mode: launch Win32 GUI and exit
+    // =========================================================================
+    if (cli_gui) {
+        if (comptime build_options.enable_gui) {
+            win32_gui.run();
+            return;
+        } else {
+            log("Error: GUI mode is not available on this platform.\n", .{});
+            log("GUI mode requires Windows and building with -Dgui=true.\n", .{});
             std.process.exit(1);
         }
     }
