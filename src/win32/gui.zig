@@ -54,7 +54,7 @@ pub fn run() void {
     }
 
     // Initialize system tray
-    g_tray = Tray.init(@ptrCast(hwnd.?));
+    g_tray = Tray.init(@intFromPtr(hwnd.?));
     log("System tray icon created.\n", .{});
 
     // Message loop
@@ -82,12 +82,10 @@ fn wndProc(hwnd: win.HWND, uMsg: c_uint, wParam: win.WPARAM, lParam: win.LPARAM)
             switch (event) {
                 win.WM_RBUTTONUP => {
                     if (g_tray) |*tray| {
-                        tray.showContextMenu(@ptrCast(hwnd.?));
+                        tray.showContextMenu(@intFromPtr(hwnd.?));
                     }
                 },
-                win.WM_LBUTTONDBLCLK => {
-                    // Future: toggle overlay or show settings
-                },
+                win.WM_LBUTTONDBLCLK => {},
                 else => {},
             }
             return 0;

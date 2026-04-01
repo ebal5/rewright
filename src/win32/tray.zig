@@ -1,30 +1,10 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const messages = @import("messages");
 
 const win = @cImport({
-    @cDefine("WIN32_LEAN_AND_MEAN", "");
     @cInclude("windows.h");
     @cInclude("shellapi.h");
 });
-
-const NOTIFYICONDATAW = extern struct {
-    cbSize: win.DWORD,
-    hWnd: win.HWND,
-    uID: win.UINT,
-    uFlags: win.UINT,
-    uCallbackMessage: win.UINT,
-    hIcon: win.HICON,
-    szTip: [128]win.WCHAR,
-    dwState: win.DWORD = 0,
-    dwStateMask: win.DWORD = 0,
-    szInfo: [256]win.WCHAR = std.mem.zeroes([256]win.WCHAR),
-    uVersion: win.UINT = 0,
-    szInfoTitle: [64]win.WCHAR = std.mem.zeroes([64]win.WCHAR),
-    dwInfoFlags: win.DWORD = 0,
-    guidItem: win.GUID = std.mem.zeroes(win.GUID),
-    hBalloonIcon: win.HICON = null,
-};
 
 const NIF_MESSAGE = 0x00000001;
 const NIF_ICON = 0x00000002;
@@ -35,46 +15,51 @@ const NIM_DELETE = 0x00000002;
 // Context menu item IDs
 const IDM_QUIT: c_uint = 1001;
 
-extern "shell32" fn Shell_NotifyIconW(dwMessage: win.DWORD, lpData: *NOTIFYICONDATAW) callconv(.c) win.BOOL;
+/// Convert a raw handle (usize) to win.HWND without alignment checks.
+/// HWND is an opaque kernel handle, not a real pointer to struct_HWND__,
+/// so its value may not satisfy the alignment that Zig's @ptrFromInt
+/// enforces. We reinterpret the bits via a same-sized stack slot instead.
+fn hwndFromInt(raw: usize) win.HWND {
+    var val = raw;
+    return @as(*const win.HWND, @ptrCast(&val)).*;
+}
 
 pub const Tray = struct {
-    nid: NOTIFYICONDATAW,
+    nid: win.NOTIFYICONDATAW,
 
-    pub fn init(hwnd_opaque: *anyopaque) Tray {
-        const hwnd: win.HWND = @ptrCast(@alignCast(hwnd_opaque));
-        var nid: NOTIFYICONDATAW = std.mem.zeroes(NOTIFYICONDATAW);
-        nid.cbSize = @sizeOf(NOTIFYICONDATAW);
+    pub fn init(hwnd_raw: usize) Tray {
+        const hwnd: win.HWND = hwndFromInt(hwnd_raw);
+        var nid: win.NOTIFYICONDATAW = std.mem.zeroes(win.NOTIFYICONDATAW);
+        nid.cbSize = @sizeOf(win.NOTIFYICONDATAW);
         nid.hWnd = hwnd;
         nid.uID = 1;
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         nid.uCallbackMessage = messages.WM_APP_TRAY_CALLBACK;
-        // Use system default application icon
-        nid.hIcon = win.LoadIconW(null, @ptrFromInt(@as(usize, 32512))); // IDI_APPLICATION = 32512
+        nid.hIcon = win.LoadIconW(null, @ptrFromInt(@as(usize, 32512))); // IDI_APPLICATION
         copyTip(&nid.szTip, "rewright");
 
-        _ = Shell_NotifyIconW(NIM_ADD, &nid);
+        _ = win.Shell_NotifyIconW(NIM_ADD, &nid);
 
         return .{ .nid = nid };
     }
 
     pub fn deinit(self: *Tray) void {
-        _ = Shell_NotifyIconW(NIM_DELETE, &self.nid);
+        _ = win.Shell_NotifyIconW(NIM_DELETE, &self.nid);
     }
 
-    pub fn showContextMenu(self: *const Tray, hwnd_opaque: *anyopaque) void {
+    pub fn showContextMenu(self: *const Tray, hwnd_raw: usize) void {
         _ = self;
-        const hwnd: win.HWND = @ptrCast(@alignCast(hwnd_opaque));
+        const hwnd: win.HWND = hwndFromInt(hwnd_raw);
+
         const menu = win.CreatePopupMenu();
         if (menu == null) return;
         defer _ = win.DestroyMenu(menu);
 
         _ = win.AppendMenuW(menu, 0, IDM_QUIT, toUtf16("Quit"));
 
-        // Get cursor position for menu placement
         var pt: win.POINT = undefined;
         _ = win.GetCursorPos(&pt);
 
-        // Required to make the menu dismiss when clicking outside
         _ = win.SetForegroundWindow(hwnd);
         _ = win.TrackPopupMenu(
             menu,
@@ -85,7 +70,6 @@ pub const Tray = struct {
             hwnd,
             null,
         );
-        // Post a dummy message to force the menu to close properly
         _ = win.PostMessageW(hwnd, win.WM_NULL, 0, 0);
     }
 
