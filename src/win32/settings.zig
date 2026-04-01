@@ -26,7 +26,14 @@ const IDC_CANCEL: c_int = 110;
 
 // Window metrics
 const DLG_WIDTH: c_int = 450;
-const DLG_HEIGHT: c_int = 500;
+// Height is calculated from layout:
+// Whisper section: MARGIN + (CONTROL_HEIGHT+2) + 2*ROW_SPACING + SECTION_SPACING = 88
+// LLM section: (CONTROL_HEIGHT+2) + 4*ROW_SPACING + PROMPT_HEIGHT + SECTION_SPACING = 256
+// Output section: (CONTROL_HEIGHT+2) + 2*ROW_SPACING + SECTION_SPACING = 96
+// Buttons + margin: BUTTON_HEIGHT + MARGIN = 44
+// Title bar: ~40
+// Total: MARGIN + 88 + 256 + 96 + 44 + 40 = 540
+const DLG_HEIGHT: c_int = 550;
 const MARGIN: c_int = 16;
 const LABEL_WIDTH: c_int = 110;
 const CONTROL_HEIGHT: c_int = 24;
