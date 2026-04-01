@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
     //
     const enable_cuda = b.option(bool, "cuda", "Enable CUDA GPU backend (requires CUDA Toolkit)") orelse false;
     const enable_vulkan = b.option(bool, "vulkan", "Enable Vulkan GPU backend (requires Vulkan SDK; shader compilation must be done separately)") orelse false;
+    const enable_gui = b.option(bool, "gui", "Enable Win32 GUI mode (Windows only)") orelse (target.result.os.tag == .windows);
 
     // --- Paths ---
     const ggml_src = b.path("libs/whisper.cpp/ggml/src");
@@ -307,6 +308,56 @@ pub fn build(b: *std.Build) void {
     });
     model_manager_mod.addImport("console", console_mod);
 
+    const config_mod = b.createModule(.{
+        .root_source_file = b.path("src/config.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // =================================================================
+    // Win32 GUI modules (Windows only, controlled by -Dgui)
+    // =================================================================
+    const gui_mod = if (enable_gui) blk: {
+        const messages_mod = b.createModule(.{
+            .root_source_file = b.path("src/win32/messages.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        const tray_mod = b.createModule(.{
+            .root_source_file = b.path("src/win32/tray.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        tray_mod.addImport("messages", messages_mod);
+
+        const settings_mod = b.createModule(.{
+            .root_source_file = b.path("src/win32/settings.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        settings_mod.addImport("config", config_mod);
+
+        const mod = b.createModule(.{
+            .root_source_file = b.path("src/win32/gui.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        mod.addImport("tray", tray_mod);
+        mod.addImport("messages", messages_mod);
+        mod.addImport("console", console_mod);
+        mod.addImport("config", config_mod);
+        mod.addImport("settings", settings_mod);
+
+        break :blk mod;
+    } else null;
+
+    // =================================================================
+    // Build options (passed to main.zig at comptime)
+    // =================================================================
+    const options = b.addOptions();
+    options.addOption(bool, "enable_gui", enable_gui);
+
     // =================================================================
     // Main executable
     // =================================================================
@@ -325,6 +376,10 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("clipboard_hook", clipboard_hook_mod);
     exe_mod.addImport("model_manager", model_manager_mod);
     exe_mod.addImport("console", console_mod);
+    exe_mod.addImport("build_options", options.createModule());
+    if (gui_mod) |mod| {
+        exe_mod.addImport("win32_gui", mod);
+    }
 
     const exe = b.addExecutable(.{
         .name = "rewright",
@@ -361,6 +416,11 @@ pub fn build(b: *std.Build) void {
     if (target_info.os.tag == .windows) {
         exe.linkSystemLibrary("ole32");
         exe.linkSystemLibrary("winmm");
+        if (enable_gui) {
+            exe.linkSystemLibrary("user32");
+            exe.linkSystemLibrary("shell32");
+            exe.linkSystemLibrary("gdi32");
+        }
     } else {
         exe.linkSystemLibrary("pthread");
         exe.linkSystemLibrary("m");
